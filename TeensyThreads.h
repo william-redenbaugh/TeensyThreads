@@ -22,71 +22,74 @@
  *
  *******************
  *
- * Multithreading library for Teensy board.
- * See Threads.cpp for explanation of internal functions.
- *
- * A global variable "threads" of type Threads will be created
- * to provide all threading functions. See example below:
- *
- *   #include <Threads.h>
- *
- *   volatile int count = 0;
- *
- *   void thread_func(int data){
- *     while(1) count++;
- *   }
- *
- *   void setup() {
- *     threads.addThread(thread_func, 0);
- *   }
- *
- *   void loop() {
- *     Serial.print(count);
- *   }
- *
- * Alternatively, you can use the std::threads class defined
- * by C++11
- *
- *   #include <Threads.h>
- *
- *   volatile int count = 0;
- *
- *   void thread_func(){
- *     while(1) count++;
- *   }
- *
- *   void setup() {
- *     std::thead th1(thread_func);
- *     th1.detach();
- *   }
- *
- *   void loop() {
- *     Serial.print(count);
- *   }
- *
+ * This project was heavily modified by William Redenbaugh in 2020. But props to the original creator! He did the hard work
  */
 
 #ifndef _THREADS_H
 #define _THREADS_H
 
+#include <Arduino.h>
 #include <stdint.h>
 
-/* Enabling debugging information allows access to:
- *   getCyclesUsed()
- */
-// #define DEBUG
 
-extern "C" {
-  void context_switch(void);
-  void context_switch_direct(void);
-  void context_switch_pit_isr(void);
-  void loadNextThread();
-  void stack_overflow_isr(void);
-  void threads_svcall_isr(void);
-  void threads_systick_isr(void);
-}
+/*
+* @brief Enumerated State of different operating system states. 
+* @notes Used for dealing with different threading purposes. 
+*/
+enum os_state_t{
+  OS_UNINITIALIZED  = -1,
+  OS_STARTED        = 1, 
+  OS_STOPPED        = 2, 
+  OS_FIRST_RUN      = 3
+};
 
-// The stack frame saved by the interrupt
+/*
+* @brief Enumerated state of different thread states
+* @notes Used for dealing with different threading purposes such as creating, enabling, and deleting a thread. 
+*/
+enum thread_state_t{
+  THREAD_EMPTY    = 0, 
+  THREAD_RUNNING  = 1, 
+  THREAD_ENDED    = 2, 
+  THREAD_ENDING   = 3, 
+  THREAD_SUSPENDED    = 4
+}; 
+
+/*
+*   @brief Maximum amount of threads the Will-OS supports
+*   @notes Unless we transition to a linked list(which is unlikely), this will remain the max limit
+*/
+static const int MAX_THREADS = 128;
+
+/*
+* @brief Default Tick set to 100 microseconds per tick
+* @notes As far as I know, this isn't the real tick, considering ISR happens 1,000/s not 10,000/s
+*/
+static const int DEFAULT_TICK_MICROSECONDS = 100;
+
+/*
+*   @brief Supervisor call number, used for yielding the program
+*/
+const int WILL_OS_SVC_NUM = 33; 
+
+/*
+*   @brief Supervisor call number, used for yielding the program
+*/
+const int WILL_OS_SVC_NUM_ACTIVE = 34; 
+
+/*
+* @brief Default stack size of thread0, or the loop thread. 
+* @notes This should be changed based off how much the user needs. Can be changed using macro 
+*/
+#ifndef EXTERNAL_STACK0_SIZE
+static const int DEFAULT_STACK0_SIZE = 10240; 
+#else 
+static const int DEFAULT_STACK0_SIZE = EXTERNAL_STACK0_SIZE; 
+#endif 
+/*
+*   @brief register stack frame saved by interrupt
+*   @notes Used so that when we get interrupts, we can revert back the original registers. 
+*/ 
 typedef struct {
   uint32_t r0;
   uint32_t r1;
@@ -98,7 +101,10 @@ typedef struct {
   uint32_t xpsr;
 } interrupt_stack_t;
 
-// The stack frame saved by the context switch
+/*
+*   @brief Stack frame saved by context switch
+*   @notes Used for switching between threads, we save all relevant registers between threads somewhere, and get them when needed
+*/ 
 typedef struct {
   uint32_t r4;
   uint32_t r5;
@@ -146,32 +152,54 @@ typedef struct {
 #endif
 } software_stack_t;
 
+extern "C" {
+void context_switch(void);
+void context_switch_direct(void);
+void context_switch_pit_isr(void);
+void load_next_thread_asm();
+void stack_overflow_isr(void);
+void threads_svcall_isr(void);
+void threads_systick_isr(void);
+}
+
+/*
+*   @brief allows our program to "yield" out of current subroutine
+*   @notes 
+*/
+extern "C" void _os_yield(void);
+
+/*
+* @brief Sleeps the thread through a hypervisor call. 
+* @notes Checks in roughly every milliscond until thread is ready to start running again
+* @params int milliseconds since last system tick
+* @returns none
+*/
+extern void os_thread_delay_ms(int millisecond);
+
+void threads_init(void);
+
+void os_get_next_thread();
+
 // The state of each thread (including thread 0)
-class ThreadInfo {
-  public:
-    int stack_size;
-    uint8_t *stack=0;
-    int my_stack = 0;
-    software_stack_t save;
-    volatile int flags = 0;
-    void *sp;
-    int ticks;
-#ifdef DEBUG
-    unsigned long cyclesStart;  // On T_4 the CycCnt is always active - on T_3.x it currently is not - unless Audio starts it AFAIK
-    unsigned long cyclesAccum;
-#endif
+struct ThreadInfo {
+  int stack_size;
+  uint8_t *stack=0;
+  int my_stack = 0;
+  software_stack_t save;
+  volatile int flags = 0;
+  void *sp;
+  int ticks;
 };
 
 extern "C" void unused_isr(void);
 
-//added
 extern "C" int enter_sleep(int ms);
 
-typedef void (*ThreadFunction)(void*);
-typedef void (*ThreadFunctionInt)(int);
-typedef void (*ThreadFunctionNone)();
+typedef void (*thread_func_t)(void*);
+typedef void (*thread_func_tInt)(int);
+typedef void (*thread_func_tNone)();
 
-typedef void (*IsrFunction)();
+typedef void (*os_isr_function_t)();
 
 /*
  * Threads handles all the threading interaction with users. It gets
@@ -179,77 +207,31 @@ typedef void (*IsrFunction)();
  */
 class Threads {
 public:
-  // The maximum number of threads is hard-coded to simplify
-  // the implementation. See notes of ThreadInfo.
-  static const int MAX_THREADS = 8;
-  int DEFAULT_STACK_SIZE = 1024;
-  const int DEFAULT_STACK0_SIZE = 10240; // estimate for thread 0?
-  int DEFAULT_TICKS = 10;
-  static const int DEFAULT_TICK_MICROSECONDS = 100;
 
-  //ADDED, per task sleep time info
-  struct scheduler_info{
-	  volatile int sleep_time_till_end_tick;
-  } task_info[MAX_THREADS];
-  //ADDED, total time to spend asleep
-  volatile int substractor = 0;
   //ADDED, please run in infinite loop
   void idle();
   //ADDED, put mcu in sleep till next execution. doesn't work with delay
   void sleep(int ms);
-  
-  // State of threading system
-  static const int STARTED = 1;
-  static const int STOPPED = 2;
-  static const int FIRST_RUN = 3;
-
-  // State of individual threads
-  static const int EMPTY = 0;
-  static const int RUNNING = 1;
-  static const int ENDED = 2;
-  static const int ENDING = 3;
-  static const int SUSPENDED = 4;
-
-  static const int SVC_NUMBER = 0x21;
-  static const int SVC_NUMBER_ACTIVE = 0x22;
 
 protected:
-  int current_thread;
-  int thread_count;
-  int thread_error;
-
-  /*
-   * The maximum number of threads is hard-coded. Alternatively, we could implement
-   * a linked list which would mean using up less memory for a small number of
-   * threads while allowing an unlimited number of possible threads. This would
-   * probably not slow down thread switching too much, but it would introduce
-   * complexity and possibly bugs. So to simplifiy for now, we use an array.
-   * But in the future, a linked list might be more appropriate.
-   */
-  ThreadInfo *threadp[MAX_THREADS];
-  // This used to be allocated statically, as below. Kept for reference in case of bugs.
-  // ThreadInfo thread[MAX_THREADS];
 
 public: // public for debugging
-  static IsrFunction save_systick_isr;
-  static IsrFunction save_svcall_isr;
 
 public:
-  Threads();
 
   // Create a new thread for function "p", passing argument "arg". If stack is 0,
   // stack allocated on heap. Function "p" has form "void p(void *)".
-  int addThread(ThreadFunction p, void * arg=0, int stack_size=-1, void *stack=0);
+  int addThread(thread_func_t p, void * arg=0, int stack_size=-1, void *stack=0);
   // For: void f(int)
-  int addThread(ThreadFunctionInt p, int arg=0, int stack_size=-1, void *stack=0) {
-    return addThread((ThreadFunction)p, (void*)arg, stack_size, stack);
+  int addThread(thread_func_tInt p, int arg=0, int stack_size=-1, void *stack=0) {
+    return addThread((thread_func_t)p, (void*)arg, stack_size, stack);
   }
   // For: void f()
-  int addThread(ThreadFunctionNone p, int arg=0, int stack_size=-1, void *stack=0) {
-    return addThread((ThreadFunction)p, (void*)arg, stack_size, stack);
+  int addThread(thread_func_tNone p, int arg=0, int stack_size=-1, void *stack=0) {
+    return addThread((thread_func_t)p, (void*)arg, stack_size, stack);
   }
 
-  // Get the state; see class constants. Can be EMPTY, RUNNING, etc.
+  // Get the state; see class constants. Can be ThHREAD_EMPTY, RUNNING, etc.
   int getState(int id);
   // Explicityly set a state. See getState(). Call with care.
   int setState(int id, int state);
@@ -290,10 +272,10 @@ public:
   // Wait for milliseconds using yield(), giving other slices your wait time
   void delay(int millisecond);
   
-  // Start/restart threading system; returns previous state: STARTED, STOPPED, FIRST_RUN
+  // Start/restart threading system; returns previous state: STARTED, STOPPED, OS_FIRST_RUN
   // can pass the previous state to restore
   int start(int old_state = -1);
-  // Stop threading system; returns previous state: STARTED, STOPPED, FIRST_RUN
+  // Stop threading system; returns previous state: STARTED, STOPPED, OS_FIRST_RUN
   int stop();
 
   // Allow these static functions and classes to access our members
@@ -307,7 +289,7 @@ public:
 
 protected:
   void getNextThread();
-  void *loadstack(ThreadFunction p, void * arg, void *stackaddr, int stack_size);
+  void *loadstack(thread_func_t p, void * arg, void *stackaddr, int stack_size);
   static void force_switch_isr();
 
 private:
@@ -364,75 +346,9 @@ public:
       T *operator->() { return grab().me; }
       Mutex &getLock() { return lk; }
   };
-
-#define ThreadWrap(OLDOBJ, NEWOBJ) Threads::Grab<decltype(OLDOBJ)> NEWOBJ(OLDOBJ);
-#define ThreadClone(NEWOBJ) (NEWOBJ.grab().get())
-
 };
-
-
 extern Threads threads;
 
-/*
- * Rudimentary compliance to C++11 class
- *
- * See http://www.cplusplus.com/reference/thread/thread/
- *
- * Example:
- * int x;
- * void thread_func() { x++; }
- * int main() {
- *   std::thread(thread_func);
- * }
- *
- */
-namespace std {
-  class thread {
-  private:
-    int id;          // internal thread id
-    int destroy;     // flag to kill thread on instance destruction
-  public:
-    // By casting all (args...) to (void*), if there are more than one args, the compiler
-    // will fail to find a matching function. This fancy template just allows any kind of
-    // function to match.
-    template <class F, class ...Args> explicit thread(F&& f, Args&&... args) {
-      id = threads.addThread((ThreadFunction)f, (void*)args...);
-      destroy = 1;
-    }
-    // If thread has not been detached when destructor called, then thread must end
-    ~thread() {
-      if (destroy) threads.kill(id);
-    }
-    // Threads are joinable until detached per definition, but in this implementation
-    // that's not so. We emulate expected behavior anyway.
-    bool joinable() { return destroy==1; }
-    // Once detach() is called, thread runs until it terminates; otherwise it terminates
-    // when destructor called.
-    void detach() { destroy = 0; }
-    // In theory, the thread merges with the running thread; if we just wait until
-    // termination, it's basically the same thing except it's slower because
-    // there are two threads running instead of one. Close enough.
-    void join() { threads.wait(id); }
-    // Get the unique thread id.
-    int get_id() { return id; }
-  };
-
-  class mutex {
-    private:
-      Threads::Mutex mx;
-    public:
-      void lock() { mx.lock(); }
-      bool try_lock() { return mx.try_lock(); }
-      void unlock() { mx.unlock(); }
-  };
-
-  template <class cMutex> class lock_guard {
-    private:
-      cMutex *r;
-    public:
-      explicit lock_guard(cMutex& m) { r = &m; r->lock(); }
-      ~lock_guard() { r->unlock(); }
-  };
-}
+int os_add_thread(thread_func_t p, void * arg, int stack_size, void *stack);
 
 #endif

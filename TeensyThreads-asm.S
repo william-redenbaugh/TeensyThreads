@@ -109,7 +109,7 @@ context_switch:
 context_switch_check:
 
   // Count down number of ticks we should stay in thread
-  LDR r0, =currentCount    // get the tick count (address to variable)
+  LDR r0, = current_count  // get the tick count (address to variable)
   LDR r1, [r0]             // get the value from the address
   CMP r1, #0               // is it 0?
   BEQ call_direct          // if so, thread is done, so switch
@@ -120,7 +120,7 @@ context_switch_check:
 call_direct:
 
   // Just do the context-switch (even if it's not time)
-  LDR r0, =currentActive   // If the thread isn't active, skip it
+  LDR r0, = current_active_state   // If the thread isn't active, skip it
   LDR r0, [r0]
   CMP r0, #1
   BNE to_exit
@@ -131,7 +131,7 @@ call_direct_active:
   // Most thread libraries save this to the thread stack. I don't for simplicity
   // and to make debugging easier. Since the Teensy doesn't have a debugging port,
   // it's hard to examine the stack so this is easier.
-  LDR r0, =currentSave         // get the address of the pointer
+  LDR r0, = current_save       // get the address of the pointer
   LDR r0, [r0]                 // get the pointer itself
   STMIA r0!, {r4-r11,lr}       // save r4-r11 to buffer
 
@@ -144,19 +144,19 @@ call_direct_active:
   // Are we running on thread 0, which is MSP?
   // It so, there is no need to save the stack pointer because MSP is never changed.
   // If not, save the stack pointer.
-  LDR r0, =currentMSP          // get the address of the variable
+  LDR r0, = current_msp        // get the address of the variable
   LDR r0, [r0]                 // get value from address
   CMP r0, #0                   // it is 0? This means it's PSP
   BNE current_is_msp           // not 0, so MSP, we can skip saving SP
   MRS r0, psp                  // get the PSP value
-  LDR r1, =currentSP           // get the address of our save variable
+  LDR r1, = current_sp         // get the address of our save variable
   STR r0, [r1]                 // and store the PSP value there
   current_is_msp:
 
-  BL loadNextThread;           // set the state to next running thread
+  BL load_next_thread_asm;           // set the state to next running thread
 
   // Restore the r4-r11 registers from the saved thread
-  LDR r0, =currentSave         // get address of pointer save buffer
+  LDR r0, = current_save       // get address of pointer save buffer
   LDR r0, [r0]                 // get the actual pointer
   LDMIA r0!, {r4-r11,lr}       // and restore r4-r11 & lr from save buffer
 
@@ -170,12 +170,12 @@ call_direct_active:
   // Switching to MSP? no need to restore MSP.
   AND lr, lr, #0x10            // return stack with FP bit?
   ORR lr, lr, #0xFFFFFFE9      // add basic LR bits
-  LDR r0, =currentMSP          // get address of the variable
+  LDR r0, = current_msp        // get address of the variable
   LDR r0, [r0]                 // get the actual value
   CMP r0, #0                   // is it 0? Then it's PSP
   BNE to_exit                  // it's not 0, so it's MSP, all done
                                // if it's PSP, we need to switch PSP
-  LDR r0, =currentSP           // get address of stack pointer
+  LDR r0, = current_sp         // get address of stack pointer
   LDR r0, [r0]                 // get the actual value
   MSR psp, r0                  // save it to PSP
   ORR lr, lr, #0b100           // set the PSP context switch
