@@ -49,7 +49,7 @@ struct scheduler_info{
   * complexity and possibly bugs. So to simplifiy for now, we use an array.
   * But in the future, a linked list might be more appropriate.
   */
-ThreadInfo *system_threads[MAX_THREADS];
+thread_t *system_threads[MAX_THREADS];
 
 Threads threads;
 
@@ -57,13 +57,13 @@ unsigned int time_start;
 unsigned int time_end;
 
 // These variables are used by the assembly context_switch() function.
-// They are copies or pointers to data in Threads and ThreadInfo
+// They are copies or pointers to data in Threads and thread_t
 // and put here seperately in order to simplify the code.
 extern "C" {
   int current_use_systick;      // using Systick vs PIT/GPT
   int current_active_state;          // state of the system (first, start, stop)
   int current_count;
-  ThreadInfo *current_thread;  // the thread currently THREAD_running
+  thread_t *current_thread;  // the thread currently THREAD_running
   void *current_save;
   int current_msp;             // Stack pointers to save
   void *current_sp;
@@ -222,7 +222,7 @@ void threads_init(void){
     system_threads[i] = NULL;
   }
   // fill thread 0, which is always THREAD_running
-  system_threads[0] = new ThreadInfo();
+  system_threads[0] = new thread_t();
 
   // initialize context_switch() globals from thread 0, which is MSP and always THREAD_running
   current_thread = system_threads[0];        // thread 0 is active
@@ -356,7 +356,7 @@ int Threads::setSliceMillis(int milliseconds)
 
 void os_del_process(void){
   int old_state = os_stop();
-  ThreadInfo *me = system_threads[current_thread_id];
+  thread_t *me = system_threads[current_thread_id];
   // Would love to delete stack here but the thread doesn't
   // end now. It continues until the next tick.
   // if (me->my_stack) {
@@ -410,11 +410,11 @@ int os_add_thread(thread_func_t p, void * arg, int stack_size, void *stack){
   if (stack_size == -1) stack_size = OS_DEFAULT_STACK_SIZE;
   for (int i=1; i < MAX_THREADS; i++) {
     if (system_threads[i] == NULL) { // THREAD_empty thread, so fill it
-      system_threads[i] = new ThreadInfo();
+      system_threads[i] = new thread_t();
       
     }
     if (system_threads[i]->flags == THREAD_ENDED || system_threads[i]->flags == THREAD_EMPTY) { // free thread
-      ThreadInfo *tp = system_threads[i]; // working on this thread
+      thread_t *tp = system_threads[i]; // working on this thread
       if (tp->stack && tp->my_stack) {
         delete[] tp->stack;
       }

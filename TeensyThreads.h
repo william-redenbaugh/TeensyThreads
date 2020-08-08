@@ -150,8 +150,11 @@ typedef struct {
   uint32_t fpscr;
 } software_stack_t;
 
-// The state of each thread (including thread 0)
-struct ThreadInfo {
+/*
+*   @brief Struct that contains information for each thread
+*   @notes Used to deal with thread context switching
+*/
+typedef struct thread_t{
   int stack_size;
   uint8_t *stack=0;
   int my_stack = 0;
@@ -161,24 +164,78 @@ struct ThreadInfo {
   int ticks;
 };
 
+/*
+* @brief Redeclaration of thread function
+* @notes Holds pointer to begining of thread function subroutine. Holds register space for void pointer 
+*/
 typedef void (*thread_func_t)(void*);
+
+/*
+* @brief Redclaration of thread function with integer parameter
+* @notes  Holds pointer to begining of thread function subroutine with registers set asside for integer manipulation
+*/
 typedef void (*thread_func_tInt)(int);
+
+/*
+* @brief Redeclaration of thread function with no parameter
+* @notes  Holds pointer of begining of thread function subroutine. 
+*/
 typedef void (*thread_func_tNone)();
+
+/*
+* @brief Interrupt service function call
+* @notes  Used to deal with ISR functions
+*/
 typedef void (*os_isr_function_t)();
 
 extern "C" {
+
+/*
+* @brief  Assembly call to the context switch subroutine 
+* @notes  Uses for switching "contexts" between threads. 
+*/
 void context_switch(void);
+
+/*
+* @brief Assembly call to the context switch direct subroutine"
+* @notes  Used for switching "contexts" between threads, bypasses some of the typical context switch subrountes
+*/
 void context_switch_direct(void);
+
+/*
+* @brief Assembly call helping deal with context switching
+* @notes n/a
+*/
 void context_switch_pit_isr(void);
+
+/*
+* @brief function that is to be called in assembly to access contexts for thread switching
+* @notes  Should only be called for assembly use, not user use
+*/
 void load_next_thread_asm();
+
+/*
+* @brief If our stack overflows, we call this subroutine
+* @notes  n/a
+*/
 void stack_overflow_isr(void);
+
+/*
+* @brief isr helping deal with thread stuff
+* @notes  n/a
+*/
 void threads_svcall_isr(void);
+
+/*
+* @brief isr helping deal with system tick stuff
+* @notes  n/a
+*/
 void threads_systick_isr(void);
 }
 
 /*
 *   @brief allows our program to "yield" out of current subroutine
-*   @notes 
+*   @notes Call's hypervisor command to look into something else. 
 */
 extern "C" void _os_yield(void);
 
@@ -190,6 +247,12 @@ extern "C" void _os_yield(void);
 */
 extern void os_thread_delay_ms(int millisecond);
 
+/*
+*   @brief Used to startup the Will-OS "Kernel" of sorts
+*   @notes Must be called before you do any multithreading with the willos kernel
+*   @params none
+*   @returns none
+*/
 void threads_init(void);
 
 void os_get_next_thread();
