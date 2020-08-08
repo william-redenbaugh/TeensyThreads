@@ -175,13 +175,13 @@ typedef void (*thread_func_t)(void*);
 * @brief Redclaration of thread function with integer parameter
 * @notes  Holds pointer to begining of thread function subroutine with registers set asside for integer manipulation
 */
-typedef void (*thread_func_tInt)(int);
+typedef void (*int_thread_func_t)(int);
 
 /*
 * @brief Redeclaration of thread function with no parameter
 * @notes  Holds pointer of begining of thread function subroutine. 
 */
-typedef void (*thread_func_tNone)();
+typedef void (*none_thread_func_t);
 
 /*
 * @brief Interrupt service function call
@@ -278,16 +278,20 @@ void os_get_next_thread();
 *   @params int tick_microseconds
 *   @returns none
 */
-bool os_set_microsecond_timer(int tick_microseconds)
-
-extern "C" void unused_isr(void);
-
-extern "C" int enter_sleep(int ms);
+bool os_set_microsecond_timer(int tick_microseconds);
 
 /*
- * Threads handles all the threading interaction with users. It gets
- * instantiated in a global variable "threads".
- */
+* @brief unused ISR routine that we can use for whatever
+* @notes I guess we have this here if we wanna use it 
+*/
+extern "C" void unused_isr(void);
+
+/*
+* @brief allows us to sleep the thread for a period of time. 
+*/ 
+extern "C" int enter_sleep(int ms);
+
+
 class Threads {
 public:
 
@@ -306,11 +310,11 @@ public:
   // stack allocated on heap. Function "p" has form "void p(void *)".
   int addThread(thread_func_t p, void * arg=0, int stack_size=-1, void *stack=0);
   // For: void f(int)
-  int addThread(thread_func_tInt p, int arg=0, int stack_size=-1, void *stack=0) {
+  int addThread(int_thread_func_t p, int arg=0, int stack_size=-1, void *stack=0) {
     return addThread((thread_func_t)p, (void*)arg, stack_size, stack);
   }
   // For: void f()
-  int addThread(thread_func_tNone p, int arg=0, int stack_size=-1, void *stack=0) {
+  int addThread(none_thread_func_t p, int arg=0, int stack_size=-1, void *stack=0) {
     return addThread((thread_func_t)p, (void*)arg, stack_size, stack);
   }
 
