@@ -28,6 +28,9 @@
 #ifndef _THREADS_H
 #define _THREADS_H
 
+// Currenly the only platform supported by Will-OS is the Teensy 4
+#ifdef __IMXRT1062__
+
 // Importing primary libraries. 
 #include <Arduino.h>
 #include <stdint.h>
@@ -60,7 +63,11 @@ enum thread_state_t{
 *   @brief Maximum amount of threads the Will-OS supports
 *   @notes Unless we transition to a linked list(which is unlikely), this will remain the max limit
 */
+#ifndef OS_EXTERN_MAX_THREADS
 static const int MAX_THREADS = 128;
+#else
+static const int MAX_THREADS = OS_EXTERN_MAX_THREADS; 
+#endif 
 
 /*
 * @brief Default Tick set to 100 microseconds per tick
@@ -160,7 +167,7 @@ typedef struct thread_t{
   uint8_t *stack=0;
   int my_stack = 0;
   software_stack_t save;
-  volatile int flags = 0;
+  volatile thread_state_t flags = THREAD_EMPTY;
   void *sp;
   int ticks;
 };
@@ -188,6 +195,12 @@ typedef void (*none_thread_func_t);
 * @notes  Used to deal with ISR functions
 */
 typedef void (*os_isr_function_t)();
+
+/*
+* @brief  Thread id value
+* @notes
+*/
+typedef int os_thread_id_t;
 
 extern "C" {
 
@@ -273,12 +286,52 @@ void threads_init(void);
 void os_get_next_thread();
 
 /*
+* @brief Adds a thread to Will-OS Kernel
+* @notes Paralelism at it's finest!
+* @params will_os_thread_func_t thread(pointer to thread function call begining of program counter)
+* @params void *arg(pointer arguement to parameters for thread)
+* @param void *stack(pointer to begining of thread stack)
+* @param int stack_size(size of the allocated threadstack)
+* @returns none
+*/
+os_thread_id_t os_add_thread(thread_func_t p, void * arg, int stack_size, void *stack);
+
+/*
 *   @brief Allows us to change the Will-OS System tick. 
 *   @note If you want more precision in your system ticks, take care of this here. 
 *   @params int tick_microseconds
 *   @returns none
 */
 bool os_set_microsecond_timer(int tick_microseconds);
+
+/*
+* @brief Sets the state of a thread to suspended. 
+* @brief If thread doesn't exist, then 
+* @params Which thread are we trying to get our state for
+* @returns will_thread_state_t
+*/
+os_thread_id_t os_suspend_thread(os_thread_id_t target_thread_id);
+
+/*
+* @brief Sets the state of a thread to resumed. 
+* @brief If thread doesn't exist or hasn't been run before, then 
+* @params Which thread are we trying to get our state for
+* @returns will_thread_state_t
+*/
+os_thread_id_t os_resume_thread(os_thread_id_t target_thread_id);
+
+/*
+* @brief Sets the state of a thread to dead 
+* @brief If thread doesn't exist, then 
+* @params Which thread are we trying to get our state for
+* @returns will_thread_state_t
+*/
+os_thread_id_t os_kill_thread(os_thread_id_t target_thread_id);
+
+/*
+* @returns The current thread's ID. 
+*/
+os_thread_id_t os_current_id(void);
 
 /*
 * @brief unused ISR routine that we can use for whatever
@@ -290,6 +343,9 @@ extern "C" void unused_isr(void);
 * @brief allows us to sleep the thread for a period of time. 
 */ 
 extern "C" int enter_sleep(int ms);
+
+// This endif is for checking if we are using the Teensy4 IMXRT board
+#endif
 
 
 class Threads {
@@ -435,7 +491,5 @@ public:
   };
 };
 extern Threads threads;
-
-int os_add_thread(thread_func_t p, void * arg, int stack_size, void *stack);
 
 #endif

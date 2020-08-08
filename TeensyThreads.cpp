@@ -22,6 +22,15 @@
  *
  *******************
  */
+
+/*
+* Brief: File was heavily refractored and re-documented by William Redenbaugh in 2020. As much as I've gone through and flushed out the 
+* code as best as I could, props to the original creator of the TeensyThreads system. I heavily refractored it to match what I want my systeh
+* to do, but the code is still entirely based of Fernando Trias, so props to that guy! Check out his stuff. 
+*
+*/
+
+
 #include "TeensyThreads.h"
 
 Threads threads;
@@ -33,7 +42,7 @@ unsigned int time_end;
 *   @brief Current thread that we have context of.
 *   @notes This was contained in TeensyThreads' Thread class as current_thread
 */
-int current_thread_id = 0 ;
+os_thread_id_t current_thread_id = 0 ;
 
 /*
 *   @brief Keeps track of how many threads we have at the moment
@@ -337,32 +346,24 @@ extern void os_thread_delay_ms(int millisecond){
 }
 
 /*
-*   @brief Used to startup the Will-OS "Kernel" of sorts
-*   @notes Must be called before you do any multithreading with the willos kernel
-*   @params none
-*   @returns none
+* @brief Sets up our zero thread. 
+* @notes only to be called at setup
 */
-void threads_init(void){
-  // initilize thread slots to THREAD_empty
-  for(int i=0; i<MAX_THREADS; i++) {
-    system_threads[i] = NULL;
-  }
+inline void os_setup_thread_zero(void){
   // fill thread 0, which is always THREAD_running
   system_threads[0] = new thread_t();
-
-  // initialize context_switch() globals from thread 0, which is MSP and always THREAD_running
-  current_thread = system_threads[0];        // thread 0 is active
-  current_save = &system_threads[0]->save;
-  current_msp = 1;
-  current_sp = 0;
-  current_tick_count = OS_DEFAULT_TICKS;
-  current_active_state = OS_FIRST_RUN;
-  
   system_threads[0]->flags = THREAD_RUNNING;
   system_threads[0]->ticks = OS_DEFAULT_TICKS;
   system_threads[0]->stack = (uint8_t*)&_estack - DEFAULT_STACK0_SIZE;
   system_threads[0]->stack_size = DEFAULT_STACK0_SIZE;
+  thread_count++;
+}
 
+/*
+* @brief Setting up the General purpose timers that we use for the teensy 4
+* @notes 
+*/
+inline void os_setup_t4_isr_timers(void){
   // commandeer SVCall & use GTP1 Interrupt
   save_svcall_isr = _VectorsRam[11];
   if (save_svcall_isr == unused_interrupt_vector) save_svcall_isr = 0;
@@ -373,6 +374,31 @@ void threads_init(void){
 }
 
 /*
+*   @brief Used to startup the Will-OS "Kernel" of sorts
+*   @notes Must be called before you do any multithreading with the willos kernel
+*   @params none
+*   @returns none
+*/
+void threads_init(void){
+  // initilize thread slots to THREAD_empty
+  for(int i=0; i<MAX_THREADS; i++) {
+    system_threads[i] = NULL;
+  }
+
+  os_setup_thread_zero();
+
+  // initialize context_switch() globals from thread 0, which is MSP and always THREAD_running
+  current_thread = system_threads[0];        // thread 0 is active
+  current_save = &system_threads[0]->save;
+  current_msp = 1;
+  current_sp = 0;
+  current_tick_count = OS_DEFAULT_TICKS;
+  current_active_state = OS_FIRST_RUN;
+  
+  os_setup_t4_isr_timers();
+}
+
+/*
 *   @brief Starts the entire Will-OS Kernel
 *   @notes Try to avoid stopping the kernel whenever possible. 
 *   @params none
@@ -380,11 +406,15 @@ void threads_init(void){
 */
 int os_start(int prev_state = -1){
   __disable_irq();
+  
   int old_state = current_active_state;
+  
   if (prev_state == -1) 
     prev_state = OS_STARTED;
+
   current_active_state = prev_state;
   __enable_irq();
+  
   return old_state;
 }
 
@@ -428,8 +458,8 @@ void os_get_next_thread() {
     }
     if (system_threads[current_thread_id] && system_threads[current_thread_id]->flags == THREAD_RUNNING) break;
   }
-  current_tick_count = system_threads[current_thread_id]->ticks;
 
+  current_tick_count = system_threads[current_thread_id]->ticks;
   current_thread = system_threads[current_thread_id];
   current_save = &system_threads[current_thread_id]->save;
   current_msp = (current_thread_id==0?1:0);
@@ -470,8 +500,8 @@ void os_del_process(void){
 *   @params int stack_size size of the stack for this thread
 *   @returns pointer to the new threadstack. 
 */
-void *os_loadstack(thread_func_t p, void * arg, void *stackaddr, int stack_size)
-{
+void *os_loadstack(thread_func_t p, void * arg, void *stackaddr, int stack_size){
+
   interrupt_stack_t * process_frame = (interrupt_stack_t *)((uint8_t*)stackaddr + stack_size - sizeof(interrupt_stack_t) - 8);
   // Clearing up and setting all the registers.
   process_frame->r0 = (uint32_t)arg;
@@ -495,26 +525,30 @@ void *os_loadstack(thread_func_t p, void * arg, void *stackaddr, int stack_size)
 * @param int stack_size(size of the allocated threadstack)
 * @returns none
 */
-int os_add_thread(thread_func_t p, void * arg, int stack_size, void *stack){
+os_thread_id_t os_add_thread(thread_func_t p, void * arg, int stack_size, void *stack){
   int old_state = os_stop();
-  if (stack_size == -1) stack_size = OS_DEFAULT_STACK_SIZE;
+  if (stack_size == -1) 
+    stack_size = OS_DEFAULT_STACK_SIZE;
+  
   for (int i=1; i < MAX_THREADS; i++) {
-    if (system_threads[i] == NULL) { // THREAD_empty thread, so fill it
+    
+    // If there is no thread(aka NULL pointer), then we will it up with a new unintialized spot
+    if (system_threads[i] == NULL) 
       system_threads[i] = new thread_t();
-      
-    }
+
     if (system_threads[i]->flags == THREAD_ENDED || system_threads[i]->flags == THREAD_EMPTY) { // free thread
       thread_t *tp = system_threads[i]; // working on this thread
-      if (tp->stack && tp->my_stack) {
+      
+      if (tp->stack && tp->my_stack) 
         delete[] tp->stack;
-      }
+      
       if (stack==0) {
         stack = new uint8_t[stack_size];
         tp->my_stack = 1;
       }
-      else {
+      else 
         tp->my_stack = 0;
-      }
+
       tp->stack = (uint8_t*)stack;
       tp->stack_size = stack_size;
       void *psp = os_loadstack(p, arg, tp->stack, tp->stack_size);
@@ -528,12 +562,14 @@ int os_add_thread(thread_func_t p, void * arg, int stack_size, void *stack){
       
       if (old_state == OS_STARTED || old_state == OS_FIRST_RUN) 
         os_start();
+      
       return i;
     }
   }
   
   if (old_state == OS_STARTED) 
     os_start();
+  
   return -1;
 }
 
@@ -548,14 +584,78 @@ bool os_set_microsecond_timer(int tick_microseconds){
 }
 
 /*
- * Stop using the SysTick interrupt and start using
- * the IntervalTimer timer. The parameter is the number of microseconds
- * for each tick.
- */
-int Threads::setMicroTimer(int tick_microseconds)
-{
-  t4_gpt_init(tick_microseconds);
-  return 1;
+* @brief Sets the state of a thread to suspended. 
+* @brief If thread doesn't exist, then 
+* @params Which thread are we trying to get our state for
+* @returns will_thread_state_t
+*/
+os_thread_id_t os_suspend_thread(os_thread_id_t target_thread_id){
+  if(target_thread_id < thread_count){
+    system_threads[target_thread_id]->flags = THREAD_SUSPENDED;   
+  }
+  // Otherwise tell system that thread doesn't exist. 
+  return THREAD_DNE;  
+}
+
+/*
+* @brief Sets the state of a thread to resumed. 
+* @brief If thread doesn't exist or hasn't been run before, then 
+* @params Which thread are we trying to get our state for
+* @returns will_thread_state_t
+*/
+os_thread_id_t os_resume_thread(os_thread_id_t target_thread_id){
+  if(target_thread_id < thread_count){
+    system_threads[target_thread_id]->flags = THREAD_RUNNING;   
+  }
+  // Otherwise tell system that thread doesn't exist. 
+  return THREAD_DNE;  
+}
+
+/*
+* @brief Sets the state of a thread to be killed 
+* @brief If thread doesn't exist or hasn't been run before, then
+* @notes One of the biggest limitations of this atm, is that we don't deallocate the thread stack space until we create another thread. 
+* @notes in the future we should work on this 
+* @notes Meaning  
+* @params Which thread are we trying to get our state for
+* @returns will_thread_state_t
+*/
+os_thread_id_t os_kill_thread(os_thread_id_t target_thread_id){
+  if(target_thread_id < thread_count){
+    system_threads[target_thread_id]->flags = THREAD_ENDED;   
+  }
+  // Otherwise tell system that thread doesn't exist. 
+  return THREAD_DNE;  
+}
+
+/*
+* @brief Gets the state of a thread. 
+* @brief If thread doesn't exist, then 
+* @params Which thread are we trying to get our state for
+* @returns will_thread_state_t
+*/
+thread_state_t os_get_thread_state(os_thread_id_t target_thread_id){
+  if(target_thread_id < thread_count){
+    return system_threads[target_thread_id]->flags;
+  }
+  return THREAD_DNE;
+}
+
+/*
+* @returns The current thread's ID. 
+*/
+os_thread_id_t os_current_id(void){
+  return current_thread_id; 
+}
+
+/*
+* @returns the current remaining stack left for a thread, based off their ID. 
+*/
+int os_get_stack_used(os_thread_id_t target_thread_id){
+  if(target_thread_id < thread_count){
+    system_threads[target_thread_id]->stack + system_threads[target_thread_id]->stack_size - (uint8_t*)system_threads[target_thread_id]->sp;
+  }
+  return -1; 
 }
 
 /*
@@ -563,7 +663,7 @@ int Threads::setMicroTimer(int tick_microseconds)
  */
 int Threads::setSliceMicros(int microseconds)
 {
-  setMicroTimer(microseconds);
+  t4_gpt_init(microseconds);
   setDefaultTimeSlice(1);
   return 1;
 }
@@ -582,17 +682,6 @@ int Threads::setSliceMillis(int milliseconds)
     setSliceMicros(milliseconds * 1000);
   }
   return 1;
-}
-
-int Threads::getState(int id)
-{
-  return system_threads[id]->flags;
-}
-
-int Threads::setState(int id, int state)
-{
-  system_threads[id]->flags = state;
-  return state;
 }
 
 int Threads::wait(int id, unsigned int timeout_ms)
@@ -733,15 +822,6 @@ int Threads::getStackUsed(int id) {
 int Threads::getStackRemaining(int id) {
   return (uint8_t*)system_threads[id]->sp - system_threads[id]->stack;
 }
-
-#ifdef DEBUG
-unsigned long Threads::getCyclesUsed(int id) {
-  os_stop();
-  unsigned long ret = system_threads[id]->cyclesAccum;
-  os_start();
-  return ret;
-}
-#endif
 
 /*
  * On creation, stop threading and save state
