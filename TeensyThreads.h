@@ -28,9 +28,9 @@
 #ifndef _THREADS_H
 #define _THREADS_H
 
+// Importing primary libraries. 
 #include <Arduino.h>
 #include <stdint.h>
-
 
 /*
 * @brief Enumerated State of different operating system states. 
@@ -115,7 +115,6 @@ typedef struct {
   uint32_t r10;
   uint32_t r11;
   uint32_t lr;
-#ifdef __ARM_PCS_VFP
   uint32_t s0;
   uint32_t s1;
   uint32_t s2;
@@ -149,8 +148,23 @@ typedef struct {
   uint32_t s30;
   uint32_t s31;
   uint32_t fpscr;
-#endif
 } software_stack_t;
+
+// The state of each thread (including thread 0)
+struct ThreadInfo {
+  int stack_size;
+  uint8_t *stack=0;
+  int my_stack = 0;
+  software_stack_t save;
+  volatile int flags = 0;
+  void *sp;
+  int ticks;
+};
+
+typedef void (*thread_func_t)(void*);
+typedef void (*thread_func_tInt)(int);
+typedef void (*thread_func_tNone)();
+typedef void (*os_isr_function_t)();
 
 extern "C" {
 void context_switch(void);
@@ -180,26 +194,9 @@ void threads_init(void);
 
 void os_get_next_thread();
 
-// The state of each thread (including thread 0)
-struct ThreadInfo {
-  int stack_size;
-  uint8_t *stack=0;
-  int my_stack = 0;
-  software_stack_t save;
-  volatile int flags = 0;
-  void *sp;
-  int ticks;
-};
-
 extern "C" void unused_isr(void);
 
 extern "C" int enter_sleep(int ms);
-
-typedef void (*thread_func_t)(void*);
-typedef void (*thread_func_tInt)(int);
-typedef void (*thread_func_tNone)();
-
-typedef void (*os_isr_function_t)();
 
 /*
  * Threads handles all the threading interaction with users. It gets
