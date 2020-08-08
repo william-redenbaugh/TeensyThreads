@@ -109,7 +109,7 @@ context_switch:
 context_switch_check:
 
   // Count down number of ticks we should stay in thread
-  LDR r0, = current_count  // get the tick count (address to variable)
+  LDR r0, = current_tick_count  // get the tick count (address to variable)
   LDR r1, [r0]             // get the value from the address
   CMP r1, #0               // is it 0?
   BEQ call_direct          // if so, thread is done, so switch

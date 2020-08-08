@@ -48,11 +48,12 @@ enum os_state_t{
 * @notes Used for dealing with different threading purposes such as creating, enabling, and deleting a thread. 
 */
 enum thread_state_t{
-  THREAD_EMPTY    = 0, 
-  THREAD_RUNNING  = 1, 
-  THREAD_ENDED    = 2, 
-  THREAD_ENDING   = 3, 
-  THREAD_SUSPENDED    = 4
+  THREAD_DNE        = -1,
+  THREAD_EMPTY      = 0, 
+  THREAD_RUNNING    = 1, 
+  THREAD_ENDED      = 2, 
+  THREAD_ENDING     = 3, 
+  THREAD_SUSPENDED  = 4
 }; 
 
 /*
@@ -248,6 +249,14 @@ extern "C" void _os_yield(void);
 extern void os_thread_delay_ms(int millisecond);
 
 /*
+* @brief Sleeps the thread through a hypervisor call. 
+* @notes Checks in roughly every milliscond until thread is ready to start running again
+* @params seconds
+* @returns none
+*/
+#define os_thread_delay_s(seconds)  os_thread_delay_ms(1000 * seconds)
+
+/*
 *   @brief Used to startup the Will-OS "Kernel" of sorts
 *   @notes Must be called before you do any multithreading with the willos kernel
 *   @params none
@@ -255,7 +264,21 @@ extern void os_thread_delay_ms(int millisecond);
 */
 void threads_init(void);
 
+/*
+*   @brief Increments to next thread for context switching
+*   @notes Not to be called externally!
+*   @params  none
+*   @returns none
+*/
 void os_get_next_thread();
+
+/*
+*   @brief Allows us to change the Will-OS System tick. 
+*   @note If you want more precision in your system ticks, take care of this here. 
+*   @params int tick_microseconds
+*   @returns none
+*/
+bool os_set_microsecond_timer(int tick_microseconds)
 
 extern "C" void unused_isr(void);
 
