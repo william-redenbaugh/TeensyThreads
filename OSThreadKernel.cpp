@@ -33,8 +33,6 @@
 
 #include "OSThreadKernel.h"
 
-Threads threads;
-
 unsigned int time_start;
 unsigned int time_end;
 
@@ -197,8 +195,7 @@ extern "C" void context_switch_pit_isr();
 * @brief ISR that helps deal with intcrementing our system ticks
 * @notes Pushes registers onto stack, deals with saving system tick, then pops registers back on!
 */
-void __attribute((naked, noinline)) threads_systick_isr(void)
-{
+void __attribute((naked, noinline)) threads_systick_isr(void){
   if (save_systick_isr) {
     asm volatile("push {r0-r4,lr}");
     (*save_systick_isr)();
@@ -214,8 +211,7 @@ void __attribute((naked, noinline)) threads_systick_isr(void)
 * @brief ISR dealing with the Supervisor call on the threads. 
 * @notes Requires further investigation
 */
-void __attribute((naked, noinline)) threads_svcall_isr(void)
-{
+void __attribute((naked, noinline)) threads_svcall_isr(void){
   if (save_svcall_isr) {
     asm volatile("push {r0-r4,lr}");
     (*save_svcall_isr)();
@@ -398,7 +394,7 @@ void threads_init(void){
 *   @params none
 *   @returns int original state of machine
 */
-int os_start(int prev_state = -1){
+int os_start(int prev_state){
   __disable_irq();
   
   int old_state = current_active_state;
@@ -432,7 +428,7 @@ int os_stop(void) {
 *   @params  none
 *   @returns none
 */
-void os_get_next_thread() {
+inline void os_get_next_thread() {
 
   // First, save the current_sp set by context_switch
   current_thread->sp = current_sp;
@@ -521,6 +517,8 @@ void *os_loadstack(thread_func_t p, void * arg, void *stackaddr, int stack_size)
 */
 os_thread_id_t os_add_thread(thread_func_t p, void * arg, int stack_size, void *stack){
   int old_state = os_stop();
+
+  // If we don't allocate a valid stack size, then we just choose the default stack size
   if (stack_size == -1) 
     stack_size = OS_DEFAULT_STACK_SIZE;
   
@@ -533,16 +531,20 @@ os_thread_id_t os_add_thread(thread_func_t p, void * arg, int stack_size, void *
     if (system_threads[i]->flags == THREAD_ENDED || system_threads[i]->flags == THREAD_EMPTY) { // free thread
       thread_t *tp = system_threads[i]; // working on this thread
       
+      // If there was a previously allocated stack and it was allocated by the previous innstance 
       if (tp->stack && tp->my_stack) 
         delete[] tp->stack;
       
-      if (stack==0) {
+      // If there is no stack allocated, then we allocate our own
+      if (stack == NULL) {
         stack = new uint8_t[stack_size];
         tp->my_stack = 1;
       }
+      // Otherwise our stack is defined by something else!
       else 
         tp->my_stack = 0;
 
+      // Preconfigure all the propper variables
       tp->stack = (uint8_t*)stack;
       tp->stack_size = stack_size;
       void *psp = os_loadstack(p, arg, tp->stack, tp->stack_size);
@@ -554,6 +556,7 @@ os_thread_id_t os_add_thread(thread_func_t p, void * arg, int stack_size, void *
       current_active_state = old_state;
       thread_count++;
       
+      // If the operating system was started before, we restart the OS
       if (old_state == OS_STARTED || old_state == OS_FIRST_RUN) 
         os_start();
       
@@ -647,246 +650,7 @@ os_thread_id_t os_current_id(void){
 */
 int os_get_stack_used(os_thread_id_t target_thread_id){
   if(target_thread_id < thread_count){
-    system_threads[target_thread_id]->stack + system_threads[target_thread_id]->stack_size - (uint8_t*)system_threads[target_thread_id]->sp;
+    return system_threads[target_thread_id]->stack + system_threads[target_thread_id]->stack_size - (uint8_t*)system_threads[target_thread_id]->sp;
   }
   return -1; 
-}
-
-/*
- * Set each time slice to be 'microseconds' long
- clo*/
-int Threads::setSliceMicros(int microseconds)
-{
-  t4_gpt_init(microseconds);
-  setDefaultTimeSlice(1);
-  return 1;
-}
-
-/*
- * Set each time slice to be 'milliseconds' long
- */
-int Threads::setSliceMillis(int milliseconds)
-{
-  if (current_use_systick) {
-    setDefaultTimeSlice(milliseconds);
-  }
-  else {
-    // if we're using the PIT, we should probably really disable it and
-    // re-establish the systick timer; but this is easier for now
-    setSliceMicros(milliseconds * 1000);
-  }
-  return 1;
-}
-
-int Threads::wait(int id, unsigned int timeout_ms)
-{
-  unsigned int start = millis();
-  // need to store state in temp volatile memory for optimizer.
-  // "while (thread[id].flags != THREAD_RUNNING)" will be optimized away
-  volatile int state;
-  while (1) {
-    if (timeout_ms != 0 && millis() - start > timeout_ms) return -1;
-    state = system_threads[id]->flags;
-    if (state != THREAD_RUNNING) break;
-    yield();
-  }
-  return id;
-}
-
-int Threads::kill(int id)
-{
-  system_threads[id]->flags = THREAD_ENDED;
-  return id;
-}
-
-int Threads::suspend(int id)
-{
-  system_threads[id]->flags = THREAD_ENDED;
-  return id;
-}
-
-int Threads::restart(int id)
-{
-  system_threads[id]->flags = THREAD_RUNNING;
-  return id;
-}
-
-void Threads::setTimeSlice(int id, unsigned int ticks)
-{
-  system_threads[id]->ticks = ticks - 1;
-}
-
-void Threads::setDefaultTimeSlice(unsigned int ticks)
-{
-  OS_DEFAULT_TICKS = ticks - 1;
-}
-
-void Threads::setDefaultStackSize(unsigned int bytes_size)
-{
-  OS_DEFAULT_STACK_SIZE = bytes_size;
-}
-
-void Threads::yield() {
-  __asm volatile("svc %0" : : "i"(WILL_OS_SVC_NUM));
-}
-
-void Threads::yield_and_start() {
-  __asm volatile("svc %0" : : "i"(WILL_OS_SVC_NUM_ACTIVE));
-}
-
-void Threads::delay(int millisecond) {
-  int mx = millis();
-  while((int)millis() - mx < millisecond) yield();
-}
-
-void Threads::idle() {
-	volatile bool needs_run[thread_count];
-	volatile int i, j;
-	volatile int task_id_ends;
-	__disable_irq();
-	task_id_ends = 0;
-	//get lowest sleep interval from sleeping tasks into task_id_ends
-	for (i = 0; i < thread_count; i++) {
-		//sort by ending time first
-		for (j = i + 1; j < thread_count; ++j) {
-			if (task_info[i].sleep_time_till_end_tick > task_info[j].sleep_time_till_end_tick) {
-				//if end time soonest
-				if (getState(i+1) == THREAD_ENDED) {
-					task_id_ends = j; //store next task
-				}
-			}
-		}
-	}
-	//set the sleeping time to substractor
-	substractor = task_info[task_id_ends].sleep_time_till_end_tick;
-	
-	if (substractor > 0) {
-		//if sleep is needed
-		volatile int time_spent_asleep = enter_sleep(substractor);
-		//store new data based on time spent asleep
-		for (i = 0; i < thread_count; i++) {
-			needs_run[i] = 0;
-				if (getState(i+1) == THREAD_ENDED) {
-				task_info[i].sleep_time_till_end_tick -= time_spent_asleep; //substract sleep time
-				//time to run?
-				if (task_info[i].sleep_time_till_end_tick <= 0) {
-					needs_run[i] = 1;
-				} else {
-					needs_run[i] = 0;
-				}
-			}
-		}
-		//for each thread when slept, resume if needed
-		for (i = 0; i < thread_count; i++) {
-			if (needs_run[i]) {
-				setState(i+1, THREAD_RUNNING);
-				task_info[i].sleep_time_till_end_tick = 60000;
-			}
-		}
-	}
-	//reset substractor
-	substractor = 60000;
-	__enable_irq();
-	yield();
-}
-
-void Threads::sleep(int ms) {
-	int i = id();
-	if (getState(i) == THREAD_RUNNING) {
-		__disable_irq();
-		task_info[i-1].sleep_time_till_end_tick = ms;
-		setState(i, THREAD_ENDED);
-		__enable_irq();
-		yield();
-	}
-}
-
-int Threads::id() {
-  volatile int ret;
-  __disable_irq();
-  ret = current_thread_id;
-  __enable_irq();
-  return ret;
-}
-
-int Threads::getStackUsed(int id) {
-  return system_threads[id]->stack + system_threads[id]->stack_size - (uint8_t*)system_threads[id]->sp;
-}
-
-int Threads::getStackRemaining(int id) {
-  return (uint8_t*)system_threads[id]->sp - system_threads[id]->stack;
-}
-
-/*
- * On creation, stop threading and save state
- */
-Threads::Suspend::Suspend() {
-  __disable_irq();
-  save_state = current_active_state;
-  current_active_state = 0;
-  __enable_irq();
-}
-
-/*
- * On destruction, restore threading state
- */
-Threads::Suspend::~Suspend() {
-  __disable_irq();
-  current_active_state = save_state;
-  __enable_irq();
-}
-
-int Threads::Mutex::getState() {
-  int p = os_stop();
-  int ret = state;
-  os_start(p);
-  return ret;
-}
-
-int __attribute__ ((noinline)) Threads::Mutex::lock(unsigned int timeout_ms) {
-  if (try_lock()) return 1; // we're good, so avoid more checks
-
-  uint32_t start = systick_millis_count;
-  while (1) {
-    if (try_lock()) return 1;
-    if (timeout_ms && (systick_millis_count - start > timeout_ms)) return 0;
-    if (waitthread==-1) { // can hold 1 thread suspend until unlock
-      int p = os_stop();
-      waitthread = current_thread_id;
-      waitcount = current_tick_count;
-      threads.suspend(waitthread);
-      os_start(p);
-    }
-    threads.yield();
-  }
-  __flush_cpu_pipeline();
-  return 0;
-}
-
-int Threads::Mutex::try_lock() {
-  int p = os_stop();
-  if (state == 0) {
-    state = 1;
-    os_start(p);
-    return 1;
-  }
-  os_start(p);
-  return 0;
-}
-
-int __attribute__ ((noinline)) Threads::Mutex::unlock() {
-  int p = os_stop();
-  if (state==1) {
-    state = 0;
-    if (waitthread >= 0) { // reanimate a suspTHREAD_ended thread waiting for unlock
-      threads.restart(waitthread);
-      waitthread = -1;
-      __flush_cpu_pipeline();
-      threads.yield_and_start();
-      return 1;
-    }
-  }
-  __flush_cpu_pipeline();
-  os_start(p);
-  return 1;
 }

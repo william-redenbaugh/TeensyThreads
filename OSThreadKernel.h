@@ -162,15 +162,22 @@ typedef struct {
 *   @brief Struct that contains information for each thread
 *   @notes Used to deal with thread context switching
 */
-typedef struct thread_t{
+typedef struct{
+  // Size of stack
   int stack_size;
+  // Stack pointer. 
   uint8_t *stack=0;
+  // Whether or not stack was allocated by thread creation function
   int my_stack = 0;
+  // Where we save all our registers for context switching .
   software_stack_t save;
+  // Flags for dealing with thread 
   volatile thread_state_t flags = THREAD_EMPTY;
+  // Where are we in the program so far
   void *sp;
+  // Thread ticks  
   int ticks;
-};
+}thread_t;
 
 /*
 * @brief Redeclaration of thread function
@@ -282,6 +289,7 @@ extern void os_thread_delay_ms(int millisecond);
 *   @returns none
 */
 void threads_init(void);
+#define os_init() threads_init()
 
 /*
 *   @brief Increments to next thread for context switching
@@ -368,149 +376,4 @@ extern "C" int enter_sleep(int ms);
 
 // This endif is for checking if we are using the Teensy4 IMXRT board
 #endif
-
-class Threads {
-public:
-
-  //ADDED, please run in infinite loop
-  void idle();
-  //ADDED, put mcu in sleep till next execution. doesn't work with delay
-  void sleep(int ms);
-
-protected:
-
-public: // public for debugging
-
-public:
-
-  // Create a new thread for function "p", passing argument "arg". If stack is 0,
-  // stack allocated on heap. Function "p" has form "void p(void *)".
-  int addThread(thread_func_t p, void * arg=0, int stack_size=-1, void *stack=0);
-  // For: void f(int)
-  int addThread(int_thread_func_t p, int arg=0, int stack_size=-1, void *stack=0) {
-    return addThread((thread_func_t)p, (void*)arg, stack_size, stack);
-  }
-  // For: void f()
-  int addThread(none_thread_func_t p, int arg=0, int stack_size=-1, void *stack=0) {
-    return addThread((thread_func_t)p, (void*)arg, stack_size, stack);
-  }
-
-  // Get the state; see class constants. Can be ThHREAD_EMPTY, RUNNING, etc.
-  int getState(int id);
-  // Explicityly set a state. See getState(). Call with care.
-  int setState(int id, int state);
-  // Wait until thread returns up to timeout_ms milliseconds. If ms is 0, wait
-  // indefinitely.
-  int wait(int id, unsigned int timeout_ms = 0);
-  // Permanently stop a running thread. Thread will end on the next thread slice tick.
-  int kill(int id);
-  // Suspend a thread (on the next slice tick). Can be restarted with restart().
-  int suspend(int id);
-  // Restart a suspended thread.
-  int restart(int id);
-  // Set the slice length time in ticks for a thread (1 tick = 1 millisecond, unless using MicroTimer)
-  void setTimeSlice(int id, unsigned int ticks);
-  // Set the slice length time in ticks for all new threads (1 tick = 1 millisecond, unless using MicroTimer)
-  void setDefaultTimeSlice(unsigned int ticks);
-  // Set the stack size for new threads in bytes
-  void setDefaultStackSize(unsigned int bytes_size);
-  // Use the microsecond timer provided by IntervalTimer & PIT; instead of 1 tick = 1 millisecond,
-  // 1 tick will be the number of microseconds provided (default is 100 microseconds)
-  int setMicroTimer(int tick_microseconds = DEFAULT_TICK_MICROSECONDS);
-  // Simple function to set each time slice to be 'milliseconds' long
-  int setSliceMillis(int milliseconds);
-  // Set each time slice to be 'microseconds' long
-  int setSliceMicros(int microseconds);
-
-  // Get the id of the currently running thread
-  int id();
-  int getStackUsed(int id);
-  int getStackRemaining(int id);
-#ifdef DEBUG
-  unsigned long getCyclesUsed(int id);
-#endif
-
-  // Yield current thread's remaining time slice to the next thread, causing immediate
-  // context switch
-  void yield();
-  // Wait for milliseconds using yield(), giving other slices your wait time
-  void delay(int millisecond);
-  
-  // Start/restart threading system; returns previous state: STARTED, STOPPED, OS_FIRST_RUN
-  // can pass the previous state to restore
-  int start(int old_state = -1);
-  // Stop threading system; returns previous state: STARTED, STOPPED, OS_FIRST_RUN
-  int stop();
-
-  // Allow these static functions and classes to access our members
-  friend void context_switch(void);
-  friend void context_switch_direct(void);
-  friend void context_pit_isr(void);
-  friend void threads_systick_isr(void);
-  friend void threads_svcall_isr(void);
-  friend void loadNextThread();
-  friend class ThreadLock;
-
-protected:
-  void getNextThread();
-  void *loadstack(thread_func_t p, void * arg, void *stackaddr, int stack_size);
-  static void force_switch_isr();
-
-private:
-  static void del_process(void);
-  void yield_and_start();
-
-public:
-  class Mutex {
-  private:
-    volatile int state = 0;
-    volatile int waitthread = -1;
-    volatile int waitcount = 0;
-  public:
-    int getState(); // get the lock state; 1=locked; 0=unlocked
-    int lock(unsigned int timeout_ms = 0); // lock, optionally waiting up to timeout_ms milliseconds
-    int try_lock(); // if lock available, get it and return 1; otherwise return 0
-    int unlock();   // unlock if locked
-  };
-
-  class Scope {
-  private:
-    Mutex *r;
-  public:
-    Scope(Mutex& m) { r = &m; r->lock(); }
-    ~Scope() { r->unlock(); }
-  };
-
-  class Suspend {
-  private:
-    int save_state;
-  public:
-    Suspend();      // Stop threads and save thread state
-    ~Suspend();     // Restore saved state
-  };
-
-  template <class C> class GrabTemp {
-    private:
-      Mutex *lkp;
-    public:
-      C *me;
-      GrabTemp(C *obj, Mutex *lk) { me = obj; lkp=lk; lkp->lock(); }
-      ~GrabTemp() { lkp->unlock(); }
-      C &get() { return *me; }
-  };
-
-  template <class T> class Grab {
-    private:
-      Mutex lk;
-      T *me;
-    public:
-      Grab(T &t) { me = &t; }
-      GrabTemp<T> grab() { return GrabTemp<T>(me, &lk); }
-      operator T&() { return grab().get(); }
-      T *operator->() { return grab().me; }
-      Mutex &getLock() { return lk; }
-  };
-};
-extern Threads threads;
-
 #endif
