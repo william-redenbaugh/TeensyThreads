@@ -169,18 +169,27 @@ typedef struct {
 typedef struct{
   // Size of stack
   int stack_size;
+  
   // Stack pointer. 
   uint8_t *stack=0;
+  
   // Whether or not stack was allocated by thread creation function
   int my_stack = 0;
+  
   // Where we save all our registers for context switching .
   software_stack_t save;
+  
   // Flags for dealing with thread 
   volatile thread_state_t flags = THREAD_EMPTY;
+  
   // Where are we in the program so far
   void *sp;
+
   // Thread ticks  
   int ticks;
+
+  // Flags to set or clear signals to a thread. 
+  volatile uint32_t thread_set_flags = 0x0000;
 }thread_t;
 
 /*
@@ -377,6 +386,83 @@ extern "C" void unused_isr(void);
 * @brief allows us to sleep the thread for a period of time. 
 */ 
 extern "C" int enter_sleep(int ms);
+
+/*
+* @brief Which threads we want to set signals for
+*/
+typedef enum{
+  THREAD_SIGNAL_0   = 0,
+  THREAD_SIGNAL_1   = 1,
+  THREAD_SIGNAL_2   = 2,
+  THREAD_SIGNAL_3   = 3,
+  THREAD_SIGNAL_4   = 4,
+  THREAD_SIGNAL_5   = 5,
+  THREAD_SIGNAL_6   = 6,
+  THREAD_SIGNAL_7   = 7,
+  THREAD_SIGNAL_8   = 8,
+  THREAD_SIGNAL_9   = 9,
+  THREAD_SIGNAL_10  = 10,
+  THREAD_SIGNAL_11  = 11,
+  THREAD_SIGNAL_12  = 12,
+  THREAD_SIGNAL_13  = 13,
+  THREAD_SIGNAL_14  = 14,
+  THREAD_SIGNAL_15  = 15,
+  THREAD_SIGNAL_16  = 16,
+  THREAD_SIGNAL_17  = 17,
+  THREAD_SIGNAL_18  = 18,
+  THREAD_SIGNAL_19  = 19,
+  THREAD_SIGNAL_20  = 20,
+  THREAD_SIGNAL_21  = 21,
+  THREAD_SIGNAL_22  = 22,
+  THREAD_SIGNAL_23  = 23,
+  THREAD_SIGNAL_24  = 24,
+  THREAD_SIGNAL_25  = 25,
+  THREAD_SIGNAL_26  = 26,
+  THREAD_SIGNAL_27  = 27, 
+  THREAD_SIGNAL_28  = 28,
+  THREAD_SIGNAL_29  = 29,
+  THREAD_SIGNAL_30  = 30,
+  THREAD_SIGNAL_31  = 31
+}thread_signal_t;
+
+/*
+* @brief The staus of a thread whose bits we wanna check
+*/
+typedef enum{
+  THREAD_SIGNAL_SET, 
+  THREAD_SIGNAL_CLEAR, 
+  THREAD_SIGNAL_DNE
+}thread_signal_status_t;
+
+/*
+* @brief Allows us to send signals to each thread by setting a bitmask
+* @notes This uses preset flags to allow us to set and clear clags in a thread
+* @params thread_signal_t thread_signal(there are 32 thread signals per thread)
+*/
+void os_thread_signal(thread_signal_t thread_signal);
+
+/*
+* @brief Allows us to send signals to each thread by clearing a bitmask
+* @notes This uses preset flags to allow us to set and clear clags in a thread
+* @params thread_signal_t thread_signal(there are 32 thread signals per thread)
+*/
+void os_thread_clear(thread_signal_t thread_signal);
+
+/*
+* @brief Allows us to send signals to each thread by setting a bitmask
+* @notes This uses preset flags to allow us to set and clear clags in a thread
+* @params thread_signal_t thread_signal(there are 32 thread signals per thread)
+* @params os_thread_id_t target_thread_id which thread we want to signal
+*/
+bool os_signal_thread(thread_signal_t thread_signal, os_thread_id_t target_thread_id);
+
+/*
+* @brief Allows us to send signals to each thread by clearing a bitmask
+* @notes This uses preset flags to allow us to set and clear clags in a thread
+* @params thread_signal_t thread_signal(there are 32 thread signals per thread)
+* @params os_thread_id_t target_thread_id in which we want to clear flags
+*/
+bool os_signal_thread_clear(thread_signal_t thread_signal, os_thread_id_t target_thread_id);
 
 // This endif is for checking if we are using the Teensy4 IMXRT board
 #endif

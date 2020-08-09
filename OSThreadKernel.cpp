@@ -589,6 +589,7 @@ bool os_set_microsecond_timer(int tick_microseconds){
 os_thread_id_t os_suspend_thread(os_thread_id_t target_thread_id){
   if(target_thread_id < thread_count){
     system_threads[target_thread_id]->flags = THREAD_SUSPENDED;   
+    return target_thread_id;
   }
   // Otherwise tell system that thread doesn't exist. 
   return THREAD_DNE;  
@@ -603,6 +604,7 @@ os_thread_id_t os_suspend_thread(os_thread_id_t target_thread_id){
 os_thread_id_t os_resume_thread(os_thread_id_t target_thread_id){
   if(target_thread_id < thread_count){
     system_threads[target_thread_id]->flags = THREAD_RUNNING;   
+    return target_thread_id; 
   }
   // Otherwise tell system that thread doesn't exist. 
   return THREAD_DNE;  
@@ -618,9 +620,8 @@ os_thread_id_t os_resume_thread(os_thread_id_t target_thread_id){
 * @returns will_thread_state_t
 */
 os_thread_id_t os_kill_thread(os_thread_id_t target_thread_id){
-  if(target_thread_id < thread_count){
+  if(target_thread_id < thread_count)
     system_threads[target_thread_id]->flags = THREAD_ENDED;   
-  }
   // Otherwise tell system that thread doesn't exist. 
   return THREAD_DNE;  
 }
@@ -632,9 +633,8 @@ os_thread_id_t os_kill_thread(os_thread_id_t target_thread_id){
 * @returns will_thread_state_t
 */
 thread_state_t os_get_thread_state(os_thread_id_t target_thread_id){
-  if(target_thread_id < thread_count){
+  if(target_thread_id < thread_count)
     return system_threads[target_thread_id]->flags;
-  }
   return THREAD_DNE;
 }
 
@@ -649,8 +649,55 @@ os_thread_id_t os_current_id(void){
 * @returns the current remaining stack left for a thread, based off their ID. 
 */
 int os_get_stack_used(os_thread_id_t target_thread_id){
-  if(target_thread_id < thread_count){
+  if(target_thread_id < thread_count)
     return system_threads[target_thread_id]->stack + system_threads[target_thread_id]->stack_size - (uint8_t*)system_threads[target_thread_id]->sp;
-  }
   return -1; 
+}
+
+/*
+* @brief Allows us to send signals to each thread by setting a bitmask
+* @notes This uses preset flags to allow us to set and clear clags in a thread
+* @params thread_signal_t thread_signal(there are 32 thread signals per thread)
+*/
+void os_thread_signal(thread_signal_t thread_signal){
+  system_threads[current_thread_id]->thread_set_flags |= (1 << (uint32_t)thread_signal); 
+}
+
+/*
+* @brief Allows us to send signals to each thread by clearing a bitmask
+* @notes This uses preset flags to allow us to set and clear clags in a thread
+* @params thread_signal_t thread_signal(there are 32 thread signals per thread)
+*/
+void os_thread_clear(thread_signal_t thread_signal){
+  system_threads[current_thread_id]->thread_set_flags &= ~(1 << (uint32_t)thread_signal);
+}
+
+/*
+* @brief Allows us to send signals to each thread by setting a bitmask
+* @notes This uses preset flags to allow us to set and clear clags in a thread
+* @params thread_signal_t thread_signal(there are 32 thread signals per thread)
+* @params os_thread_id_t target_thread_id which thread we want to signal
+*/
+bool os_signal_thread(thread_signal_t thread_signal, os_thread_id_t target_thread_id){
+  if(target_thread_id < thread_count){
+    system_threads[target_thread_id]->thread_set_flags |= (1 << (uint32_t)thread_signal); 
+    return true; 
+  }
+
+  return false; 
+}
+
+/*
+* @brief Allows us to send signals to each thread by clearing a bitmask
+* @notes This uses preset flags to allow us to set and clear clags in a thread
+* @params thread_signal_t thread_signal(there are 32 thread signals per thread)
+* @params os_thread_id_t target_thread_id in which we want to clear flags
+*/
+bool os_signal_thread_clear(thread_signal_t thread_signal, os_thread_id_t target_thread_id){
+  if(target_thread_id < thread_count){
+    system_threads[target_thread_id]->thread_set_flags &= ~(1 << (uint32_t)thread_signal);
+    return true; 
+  }
+
+  return false; 
 }
