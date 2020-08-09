@@ -197,6 +197,12 @@ typedef void (*none_thread_func_t);
 typedef void (*os_isr_function_t)();
 
 /*
+*   @brief Ensures that all memory access appearing before this program point are taken care of.   
+*   @notes To understand more, visit: https://www.keil.com/support/man/docs/armasm/armasm_dom1361289870356.htm
+*/
+#define __flush_cpu_pipeline() __asm__ volatile("DMB");
+
+/*
 * @brief  Thread id value
 * @notes
 */
@@ -329,6 +335,22 @@ os_thread_id_t os_resume_thread(os_thread_id_t target_thread_id);
 os_thread_id_t os_kill_thread(os_thread_id_t target_thread_id);
 
 /*
+*   @brief Stops the entire Will-OS Kernel
+*   @notes Try to avoid stopping the kernel whenever possible. 
+*   @params none
+*   @returns int original state of machine
+*/
+int os_stop(void);
+
+/*
+*   @brief Starts the entire Will-OS Kernel
+*   @notes Try to avoid stopping the kernel whenever possible. 
+*   @params none
+*   @returns int original state of machine
+*/
+int os_start(int prev_state = -1);
+
+/*
 * @returns The current thread's ID. 
 */
 os_thread_id_t os_current_id(void);
@@ -346,36 +368,6 @@ extern "C" int enter_sleep(int ms);
 
 // This endif is for checking if we are using the Teensy4 IMXRT board
 #endif
-
-/*
-* @brief The different states that one can get from the mutex
-*/
-enum MutexLockState_t{
-  MUTEX_UNLOCKED, 
-  MUTEX_LOCKED
-};
-
-enum MutexLockReturnStatus{
-  MUTEX_ACQUIRE_SUCESS  = 1, 
-  MUTEX_ACQUIRE_FAIL    = 0
-};
-
-/*
-* @brief Object Reference to control our mutexes 
-* @notes So we can take care of our mutex stuff
-*/
-class MutexLock{
-  public: 
-    MutexLockState_t getState(void);
-    MutexLockReturnStatus lock(int timeout_ms);
-    MutexLockReturnStatus tryLock(void);
-    
-    void lockWaitIndefinite(void);
-    void unlock(void);
-
-  private: 
-    volatile MutexLockState_t state = MUTEX_UNLOCKED;
-};
 
 class Threads {
 public:
