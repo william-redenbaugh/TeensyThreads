@@ -1,6 +1,11 @@
 #include "OSMutexKernel.h"
 
 /*
+Author: William Redenbaugh, Fernando Trias
+Last Edit Date: 8/9/2020
+*/
+
+/*
 * @brief Allows us to check the current state of our mutex
 * @returns MutexLockState_t state of the mutex
 */
@@ -16,7 +21,7 @@ MutexLockState_t MutexLock::getState(void){
 * @params timeout_ms
 * @returns MutexLockReturnStatus or whether or not we were able to get the mutex
 */
-MutexLockReturnStatus __attribute__ ((noinline)) MutexLock::lock(int timeout_ms){
+MutexLockReturnStatus __attribute__ ((noinline)) MutexLock::lock(uint32_t timeout_ms){
   if(this->tryLock())
     return MUTEX_ACQUIRE_SUCESS;
   

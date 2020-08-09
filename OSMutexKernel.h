@@ -23,7 +23,7 @@ enum MutexLockReturnStatus{
 class MutexLock{
   public: 
     MutexLockState_t getState(void);
-    MutexLockReturnStatus lock(int timeout_ms);
+    MutexLockReturnStatus lock(uint32_t timeout_ms);
     MutexLockReturnStatus tryLock(void);
     
     void lockWaitIndefinite(void);

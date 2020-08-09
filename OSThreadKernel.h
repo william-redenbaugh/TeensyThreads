@@ -25,6 +25,10 @@
  * This project was heavily modified by William Redenbaugh in 2020. But props to the original creator! He did the hard work
  */
 
+/*
+Author: William Redenbaugh, Fernando Trias
+Last Edit Date: 8/9/2020
+*/
 #ifndef _THREADS_H
 #define _THREADS_H
 
