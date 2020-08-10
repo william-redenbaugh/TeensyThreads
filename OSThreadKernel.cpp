@@ -698,6 +698,65 @@ bool os_signal_thread_clear(thread_signal_t thread_signal, os_thread_id_t target
     system_threads[target_thread_id]->thread_set_flags &= ~(1 << (uint32_t)thread_signal);
     return true; 
   }
-
   return false; 
+}
+
+/*
+* @brief We can check if there are bits that are signaled
+* @params thread_signal which bits we want to check,
+* @params target_thread_id which thread we 
+* @return if those bits are set or not
+*/  
+thread_signal_status_t os_checkbits_thread(thread_signal_t thread_signal, os_thread_id_t target_thread_id){
+  if(target_thread_id < thread_count){
+    if(CHECK_BIT(system_threads[target_thread_id]->thread_set_flags, (uint32_t)thread_signal))
+      return THREAD_SIGNAL_SET; 
+    return THREAD_SIGNAL_CLEAR; 
+  }
+  return THREAD_SIGNAL_DNE;
+}
+
+/*
+* @brief We can check if there are bits that are signaled
+* @params which bits we want to check,
+* @return if those bits are set or not
+*/  
+thread_signal_status_t os_thread_checkbits(thread_signal_t thread_signal){
+  if(CHECK_BIT(system_threads[current_thread_id]->thread_set_flags, (uint32_t)thread_signal))
+      return THREAD_SIGNAL_SET; 
+    return THREAD_SIGNAL_CLEAR; 
+}
+
+/*
+* @brief Hangs thread until either timeout or until thread signal bits have been set
+* @notes Best not to 
+*
+*/
+thread_signal_status_t os_thread_waitbits(thread_signal_t thread_signal, uint32_t timeout_ms){
+  if(os_thread_checkbits(thread_signal) == THREAD_SIGNAL_SET)
+    return THREAD_SIGNAL_SET; 
+
+  uint32_t start = millis();
+  
+  while(1){
+    if(os_thread_checkbits(thread_signal) == THREAD_SIGNAL_SET)
+      return THREAD_SIGNAL_SET;
+  
+    if(timeout_ms && (millis() - start > timeout_ms))
+      return THREAD_SIGNAL_TIMEOUT;
+  
+    _os_yield();
+  }
+}
+
+/*
+* @brief Hangs thread until signal has been cleared, no timeout
+* @params thread_signal_t thread_signal
+*/
+void os_thread_waitbits_notimeout(thread_signal_t thread_signal){
+  while(1){
+    if(os_thread_checkbits(thread_signal) == THREAD_SIGNAL_SET)
+      return; 
+    _os_yield();  
+  }
 }

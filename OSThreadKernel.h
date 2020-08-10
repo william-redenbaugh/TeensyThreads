@@ -431,8 +431,12 @@ typedef enum{
 typedef enum{
   THREAD_SIGNAL_SET, 
   THREAD_SIGNAL_CLEAR, 
-  THREAD_SIGNAL_DNE
+  THREAD_SIGNAL_DNE, 
+  THREAD_SIGNAL_TIMEOUT
 }thread_signal_status_t;
+
+#define CHECK_BIT(var,pos) ((var) & (1<<(pos)))
+
 
 /*
 * @brief Allows us to send signals to each thread by setting a bitmask
@@ -463,6 +467,27 @@ bool os_signal_thread(thread_signal_t thread_signal, os_thread_id_t target_threa
 * @params os_thread_id_t target_thread_id in which we want to clear flags
 */
 bool os_signal_thread_clear(thread_signal_t thread_signal, os_thread_id_t target_thread_id);
+
+/*
+* @brief We can check if there are bits that are signaled
+* @params which bits we want to check,
+* @return if those bits are set or not
+*/  
+thread_signal_status_t os_thread_checkbits(thread_signal_t thread_signal);
+
+/*
+* @brief We can check if there are bits that are signaled
+* @params thread_signal which bits we want to check,
+* @params target_thread_id which thread we 
+* @return if those bits are set or not
+*/  
+thread_signal_status_t os_checkbits_thread(thread_signal_t thread_signal, os_thread_id_t target_thread_id);
+
+/*
+* @brief Hangs thread until signal has been cleared
+* @params thread_signal_t thread_signal
+*/
+void os_thread_waitbits_notimeout(thread_signal_t thread_signal);
 
 // This endif is for checking if we are using the Teensy4 IMXRT board
 #endif
