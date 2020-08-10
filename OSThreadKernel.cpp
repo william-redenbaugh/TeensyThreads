@@ -709,7 +709,7 @@ bool os_signal_thread_clear(thread_signal_t thread_signal, os_thread_id_t target
 */  
 thread_signal_status_t os_checkbits_thread(thread_signal_t thread_signal, os_thread_id_t target_thread_id){
   if(target_thread_id < thread_count){
-    if(CHECK_BIT(system_threads[target_thread_id]->thread_set_flags, (uint32_t)thread_signal))
+    if(OS_CHECK_BIT(system_threads[target_thread_id]->thread_set_flags, (uint32_t)thread_signal))
       return THREAD_SIGNAL_SET; 
     return THREAD_SIGNAL_CLEAR; 
   }
@@ -722,7 +722,7 @@ thread_signal_status_t os_checkbits_thread(thread_signal_t thread_signal, os_thr
 * @return if those bits are set or not
 */  
 thread_signal_status_t os_thread_checkbits(thread_signal_t thread_signal){
-  if(CHECK_BIT(system_threads[current_thread_id]->thread_set_flags, (uint32_t)thread_signal))
+  if(OS_CHECK_BIT(system_threads[current_thread_id]->thread_set_flags, (uint32_t)thread_signal))
       return THREAD_SIGNAL_SET; 
     return THREAD_SIGNAL_CLEAR; 
 }

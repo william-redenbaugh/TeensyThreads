@@ -435,8 +435,12 @@ typedef enum{
   THREAD_SIGNAL_TIMEOUT
 }thread_signal_status_t;
 
-#define CHECK_BIT(var,pos) ((var) & (1<<(pos)))
-
+/*
+* @brief Macro that checks if a certain bit in a variable is set. 
+* @params(variable, position in variable(0 lsb))
+* @returns 1 if true, 0 otherwise
+*/
+#define OS_CHECK_BIT(var,pos) ((var) & (1<<(pos)))
 
 /*
 * @brief Allows us to send signals to each thread by setting a bitmask
