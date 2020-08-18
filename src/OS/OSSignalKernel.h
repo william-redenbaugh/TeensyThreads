@@ -41,7 +41,7 @@ class OSSignal{
     void wait_notimeout(thread_signal_t thread_signal);
     
     /*
-    *   @returns The raw bits that we are using
+    *   @returns The raw bits that hold our signals.
     */
     uint32_t bits_return(void);
 
