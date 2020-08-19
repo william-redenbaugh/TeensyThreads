@@ -1,6 +1,8 @@
 # TeensyThreads Context Switching
 Even though this is a fork from the TeensyThreads library, in reality it's a complete re-write and refractor. Most of the command calls have been moved around to c-style cpp, in reality this is my codebase now execpt for the context switching. 
 
+#***NOTE*** This repository has been depricated, go check out TeensyOS for the module on my profile, or TeensyOSExamples if you want a complete example. 
+
 ##Documentation: 
 
 ### Creating a new thread example: 
