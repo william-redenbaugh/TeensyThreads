@@ -30,7 +30,7 @@ void os_usb_serial_write(const void *buffer, uint32_t size){
 */
 void os_usb_serial_read(void *buffer, uint32_t size){
     usbSerialMutex.lockWaitIndefinite();
-    usb_serial_write(buffer, size); 
+    usb_serial_read(buffer, size); 
     usbSerialMutex.unlock();
 }
 
@@ -39,5 +39,5 @@ void os_usb_serial_read(void *buffer, uint32_t size){
 *   @returns uin32_t number of bytes available
 */
 uint32_t os_usb_serial_bytes_available(void){
-    return usb_serial_available();
+    return (uint32_t)usb_serial_available();
 }

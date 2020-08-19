@@ -94,7 +94,7 @@ extern "C" {
 *   @brief Current count of system tick
 *   @notes in TeensyThreads this was currentCount
 */
-int current_use_systick;      
+static int current_use_systick;      
 
 /*
 *   @brief The current thread in the program. 
@@ -112,7 +112,7 @@ int current_tick_count;
 *   @brief The current register stack on the program
 *   @notes In TeensyThreads this was *currentThread
 */
-thread_t *current_thread;  
+static thread_t *current_thread;  
 
 /*
 * @notes inherited from TeensyThreads as currentSave
@@ -339,7 +339,7 @@ extern void os_thread_delay_ms(int millisecond){
 * @brief Sets up our zero thread. 
 * @notes only to be called at setup
 */
-inline void os_setup_thread_zero(void){
+void  __attribute__((always_inline)) os_setup_thread_zero(void){
   // fill thread 0, which is always THREAD_running
   system_threads[0] = new thread_t();
   system_threads[0]->flags = THREAD_RUNNING;
@@ -353,7 +353,7 @@ inline void os_setup_thread_zero(void){
 * @brief Setting up the General purpose timers that we use for the teensy 4
 * @notes 
 */
-inline void os_setup_t4_isr_timers(void){
+inline void __attribute__((always_inline))os_setup_t4_isr_timers(void){
   // commandeer SVCall & use GTP1 Interrupt
   save_svcall_isr = _VectorsRam[11];
   if (save_svcall_isr == unused_interrupt_vector) save_svcall_isr = 0;
